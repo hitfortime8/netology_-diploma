@@ -8,12 +8,6 @@ variable "folder_id" {
   description = "Yandex folder id"
 }
 
-variable "token" {
-  type        = string
-  sensitive   = true
-  description = "Yandex cloud OAuth token"
-}
-
 variable "zone_a" {
   type        = string
   default     = "ru-central1-a"
