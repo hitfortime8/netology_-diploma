@@ -1,0 +1,184 @@
+---
+- name: Install zabbix server and agent
+  hosts: zabbix
+  become: yes
+  vars:
+    zabbix_version: "6.4"
+    db_password: "Graychapter5"
+    zabbix_server_hostname: "zabbix.ru-central1.internal"
+
+  tasks:
+    - name: Install PostgreSQL, php
+      apt:
+        name:
+          - postgresql-14
+          - postgresql-contrib
+          - apache2
+          - php
+          - php-pgsql
+          - php-ldap
+          - php-bcmath
+          - php-mbstring
+          - php-xml
+          - php-gd
+          - libapache2-mod-php
+          - python3-psycopg2
+        state: present
+        update_cache: yes
+
+    - name: Download zabbix
+      get_url:
+        url: "https://repo.zabbix.com/zabbix/{{ zabbix_version }}/ubuntu/pool/main/z/zabbix-release/zabbix-release_{{ zabbix_version }}-1+ubuntu22.04_all.deb"
+        dest: /tmp/zabbix-release.deb
+
+    - name: Install zabbix repo
+      apt:
+        deb: /tmp/zabbix-release.deb
+
+    - name: Install zabbix server and agent
+      apt:
+        name:
+          - zabbix-server-pgsql
+          - zabbix-sql-scripts
+          - zabbix-frontend-php
+          - zabbix-agent
+        state: present
+        update_cache: yes
+
+    - name: Create zabbix db and user
+      become_user: postgres
+      postgresql_db:
+        name: zabbix
+        state: present
+
+    - name: Create db user
+      become_user: postgres
+      postgresql_user:
+        name: zabbix
+        password: "{{ db_password }}"
+        db: zabbix
+        priv: ALL
+        state: present
+
+    - name: Import zabbix schema
+      become: yes
+      become_user: postgres
+      shell: zcat /usr/share/zabbix-sql-scripts/postgresql/server.sql.gz | psql -d zabbix
+      args:
+        executable: /bin/bash
+
+    - name: Use correct DB password
+      lineinfile:
+        path: /etc/zabbix/zabbix_server.conf
+        regexp: '^# DBPassword='
+        line: "DBPassword={{ db_password }}"
+      notify: restart zabbix-server
+
+    - name: Configure Zabbix to listen all
+      lineinfile:
+        path: /etc/zabbix/zabbix_server.conf
+        regexp: '^# ListenIP='
+        line: "ListenIP=0.0.0.0"
+      notify: restart zabbix-server
+
+    - name: Connect zabbix agent to server
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^Server='
+        line: "Server=127.0.0.1"
+      notify: restart zabbix-agent
+
+    - name: Configure Zabbix agent active server
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^ServerActive='
+        line: "ServerActive=127.0.0.1"
+      notify: restart zabbix-agent
+
+    - name: Set PHP timezone
+      lineinfile:
+        path: /etc/php/8.1/apache2/php.ini
+        regexp: '^;date.timezone ='
+        line: 'date.timezone = UTC'
+      notify: restart apache2
+
+    - name: Enable and start services
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - postgresql
+        - zabbix-server
+        - zabbix-agent
+        - apache2
+
+  handlers:
+    - name: restart zabbix-server
+      systemd:
+        name: zabbix-server
+        state: restarted
+    - name: restart zabbix-agent
+      systemd:
+        name: zabbix-agent
+        state: restarted
+    - name: restart apache2
+      systemd:
+        name: apache2
+        state: restarted
+
+- name: Install agent on web, elastic, kibana
+  hosts: all:!zabbix
+  become: yes
+  vars:
+    zabbix_version: "6.4"
+    zabbix_server_hostname: "zabbix.ru-central1.internal"
+
+  tasks:
+    - name: Download zabbix
+      get_url:
+        url: "https://repo.zabbix.com/zabbix/{{ zabbix_version }}/ubuntu/pool/main/z/zabbix-release/zabbix-release_{{ zabbix_version }}-1+ubuntu22.04_all.deb"
+        dest: /tmp/zabbix-release.deb
+
+    - name: Install zabbix repo
+      apt:
+        deb: /tmp/zabbix-release.deb
+
+    - name: Install zabbix agent
+      apt:
+        name: zabbix-agent
+        state: present
+        update_cache: yes
+
+    - name: Configure zabbix server address
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^Server='
+        line: "Server={{ zabbix_server_hostname }}"
+      notify: restart zabbix-agent
+
+    - name: Configure zabbix active server
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^ServerActive='
+        line: "ServerActive={{ zabbix_server_hostname }}"
+      notify: restart zabbix-agent
+
+    - name: Set Hostname in agent config
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^Hostname='
+        line: "Hostname={{ ansible_hostname }}"
+      notify: restart zabbix-agent
+
+    - name: Start and enable zabbix-agent
+      systemd:
+        name: zabbix-agent
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: restart zabbix-agent
+      systemd:
+        name: zabbix-agent
+        state: restarted

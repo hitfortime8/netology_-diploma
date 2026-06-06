@@ -25,15 +25,21 @@ resource "yandex_vpc_security_group" "internal-sg" {
 
     ingress {
         protocol        = "TCP"
-        description     = "SSH from Bastion sbunet"
+        description     = "SSH from Bastion"
         v4_cidr_blocks  = ["10.1.0.0/24"]
         port            = 22
     }
     ingress {
         protocol        = "TCP"
-        description     = "HTTP from ALB subnet"
+        description     = "HTTP from ALB"
         v4_cidr_blocks  = ["10.1.0.0/24"]
         port            = 80
+    }
+    ingress {
+        protocol        = "TCP"
+        description     = "zabbix agent"
+        v4_cidr_blocks  = ["10.1.0.0/24"]
+        port            = 10050
     }
     egress {
         protocol        = "ANY"
@@ -50,9 +56,15 @@ resource "yandex_vpc_security_group" "zabbix-sg" {
 
     ingress {
         protocol        = "TCP"
+        description     = "SSH from bastion"
+        v4_cidr_blocks  = ["10.1.0.0/24"]
+        port            = 22
+    }
+    ingress {
+        protocol        = "TCP"
         description     = "Zabbix web UI"
         v4_cidr_blocks  = ["0.0.0.0/0"]
-        port            = 8080
+        port            = 80
     }
     ingress {
         protocol        = "TCP"
@@ -70,6 +82,18 @@ resource "yandex_vpc_security_group" "kibana-sg" {
     name        = "kibana-sg"
     network_id  = yandex_vpc_network.main.id
 
+    ingress {
+        protocol        = "TCP"
+        description     = "SSH from bastion"
+        v4_cidr_blocks  = ["10.1.0.0/24"]
+        port            = 22
+    }
+    ingress {
+        protocol        = "TCP"
+        description     = "zabbix agent"
+        v4_cidr_blocks  = ["10.1.0.0/24"]
+        port            = 10050
+    }
     ingress {
         protocol        = "TCP"
         description     = "Kibana web"
@@ -91,6 +115,12 @@ resource "yandex_vpc_security_group" "elastic-sg" {
         description     = "Elastic api"
         v4_cidr_blocks  = ["10.0.0.0/8"]
         port            = 9200
+    }
+    ingress {
+        protocol        = "TCP"
+        description     = "zabbix agent"
+        v4_cidr_blocks  = ["10.1.0.0/24"]
+        port            = 10050
     }
     ingress {
         protocol        = "TCP"

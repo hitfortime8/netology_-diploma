@@ -6,5 +6,6 @@
 # .tfstate files
 *.tfstate
 *.tfstate.*
+ips.txt
 
 terraform.tfvars

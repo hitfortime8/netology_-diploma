@@ -1,0 +1,62 @@
+---
+- name: Install nginx on web servers
+  hosts: web
+  become: yes
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Start and enable nginx
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Create website directory
+      file:
+        path: /var/www/mysite
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Copy static files
+      copy:
+        src: /home/ubuntu/ansible/files/static_site/
+        dest: /var/www/mysite/
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Configure nginx site
+      template:
+        src: /home/ubuntu/ansible/files/nginx-site.conf.j2
+        dest: /etc/nginx/sites-available/mysite
+      notify: restart nginx
+
+    - name: Enable site
+      file:
+        src: /etc/nginx/sites-available/mysite
+        dest: /etc/nginx/sites-enabled/mysite
+        state: link
+      notify: restart nginx
+
+    - name: Remove default site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: restart nginx
+
+  handlers:
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
