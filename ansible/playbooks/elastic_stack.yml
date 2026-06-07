@@ -1,0 +1,169 @@
+---
+- name: Install and configure Elasticsearch
+  hosts: elastic
+  become: yes
+
+  vars:
+    elastic_version: "8.15.0"
+    local_packages_dir: "{{ playbook_dir }}/../files/packages"
+    remote_packages_dir: "/tmp/elastic-offline"
+
+  tasks:
+    - name: Create temp directory
+      file:
+        path: "{{ remote_packages_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy elastic package
+      copy:
+        src: "{{ local_packages_dir }}/elasticsearch-{{ elastic_version }}-amd64.deb"
+        dest: "{{ remote_packages_dir }}/elasticsearch-{{ elastic_version }}-amd64.deb"
+        mode: "0644"
+
+    - name: Install elastic
+      apt:
+        deb: "{{ remote_packages_dir }}/elasticsearch-{{ elastic_version }}-amd64.deb"
+        state: present
+
+    - name: Configure elastic
+      copy:
+        dest: /etc/elasticsearch/elasticsearch.yml
+        owner: root
+        group: elasticsearch
+        mode: "0660"
+        content: |
+          cluster.name: diplom-logs
+          node.name: elastic
+          network.host: 0.0.0.0
+          http.port: 9200
+          discovery.type: single-node
+          xpack.security.enabled: false
+
+    - name: Set small heap for elastic
+      copy:
+        dest: /etc/elasticsearch/jvm.options.d/heap.options
+        owner: root
+        group: elasticsearch
+        mode: "0644"
+        content: |
+          -Xms512m
+          -Xmx512m
+
+    - name: Start Elasticsearch
+      systemd:
+        name: elasticsearch
+        enabled: true
+        state: restarted
+
+
+- name: Install and configure Kibana
+  hosts: kibana
+  become: yes
+
+  vars:
+    elastic_version: "8.15.0"
+    local_packages_dir: "{{ playbook_dir }}/../files/packages"
+    remote_packages_dir: "/tmp/elastic-offline"
+
+  tasks:
+    - name: Create temp directory
+      file:
+        path: "{{ remote_packages_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy Kibana package
+      copy:
+        src: "{{ local_packages_dir }}/kibana-{{ elastic_version }}-amd64.deb"
+        dest: "{{ remote_packages_dir }}/kibana-{{ elastic_version }}-amd64.deb"
+        mode: "0644"
+
+    - name: Install Kibana
+      apt:
+        deb: "{{ remote_packages_dir }}/kibana-{{ elastic_version }}-amd64.deb"
+        state: present
+
+    - name: Configure Kibana
+      copy:
+        dest: /etc/kibana/kibana.yml
+        owner: root
+        group: kibana
+        mode: "0660"
+        content: |
+          server.port: 5601
+          server.host: "0.0.0.0"
+          server.name: "kibana"
+          elasticsearch.hosts: ["http://elastic.ru-central1.internal:9200"]
+
+    - name: Start Kibana
+      systemd:
+        name: kibana
+        enabled: true
+        state: restarted
+
+
+- name: Install Filebeat on webs
+  hosts: web
+  become: yes
+
+  vars:
+    elastic_version: "8.15.0"
+    local_packages_dir: "{{ playbook_dir }}/../files/packages"
+    remote_packages_dir: "/tmp/elastic-offline"
+
+  tasks:
+    - name: Create temp directory
+      file:
+        path: "{{ remote_packages_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy Filebeat package
+      copy:
+        src: "{{ local_packages_dir }}/filebeat-{{ elastic_version }}-amd64.deb"
+        dest: "{{ remote_packages_dir }}/filebeat-{{ elastic_version }}-amd64.deb"
+        mode: "0644"
+
+    - name: Install Filebeat
+      apt:
+        deb: "{{ remote_packages_dir }}/filebeat-{{ elastic_version }}-amd64.deb"
+        state: present
+
+    - name: Configure Filebeat
+      copy:
+        dest: /etc/filebeat/filebeat.yml
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          filebeat.inputs:
+            - type: filestream
+              id: nginx-access
+              enabled: true
+              paths:
+                - /var/log/nginx/access.log*
+              fields:
+                service: nginx
+                log_type: access
+
+            - type: filestream
+              id: nginx-error
+              enabled: true
+              paths:
+                - /var/log/nginx/error.log*
+              fields:
+                service: nginx
+                log_type: error
+
+          output.elasticsearch:
+            hosts: ["http://elastic.ru-central1.internal:9200"]
+
+          setup.kibana:
+            host: "http://kibana.ru-central1.internal:5601"
+
+    - name: Start Filebeat
+      systemd:
+        name: filebeat
+        enabled: true
+        state: restarted

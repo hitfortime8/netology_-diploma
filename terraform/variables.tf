@@ -9,13 +9,13 @@ variable "folder_id" {
 }
 
 variable "zone_a" {
-  type        = string
-  default     = "ru-central1-a"
+  type    = string
+  default = "ru-central1-a"
 }
 
 variable "zone_b" {
-  type        = string
-  default     = "ru-central1-b"
+  type    = string
+  default = "ru-central1-b"
 }
 
 variable "public_key_bastion" {
@@ -31,8 +31,8 @@ variable "public_key_internal" {
 }
 
 variable "image_family" {
-  type        = string
-  default     = "ubuntu-2204-lts"
+  type    = string
+  default = "ubuntu-2204-lts"
 }
 
 
